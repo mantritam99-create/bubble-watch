@@ -53,6 +53,9 @@ SIGNALS = {
     "b50":        {"layer": "trig", "w": 2, "toggle": True},
     "b200":       {"layer": "trig", "w": 3, "toggle": True},
     "hy_break":   {"layer": "trig", "series": "hy_oas", "lo": 325, "hi": 600, "w": 4, "base": 0},
+    # Baa-10Y acute blowout (bps): the full-history credit trigger (HY break is
+    # API-truncated). lo=300 (acute stress) → hi=500 (≈2020; 2008 saturates).
+    "baa_break":  {"layer": "trig", "series": "baa",    "lo": 300, "hi": 500, "w": 3, "base": 0},
     "vol":        {"layer": "trig", "series": "vix",    "lo": 18,  "hi": 45,  "w": 2, "base": 0},
     "eps":        {"layer": "trig", "w": 2, "toggle": True},
 }

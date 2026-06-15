@@ -36,7 +36,7 @@ except Exception:
 
 FRED = "https://api.stlouisfed.org/fred/series/observations"
 FRED_KEY = os.environ.get("FRED_API_KEY", "")
-START = "1990-01-01"
+START = "1986-01-01"   # Baa-10Y begins 1986; captures the 1987 crash + 1990-91 recession
 
 FRED_MONTHLY = {                       # metric -> (series id, scale)
     "baa":    ("BAA10Y",       100.0),  # Moody's Baa-10Y spread, bps (1986+)

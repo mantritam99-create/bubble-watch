@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Market Risk Dashboard</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2230; --line:#2a3340;
+    --txt:#e6edf3; --muted:#8b949e; --accent:#58a6ff;
+    --green:#3fb950; --amber:#d29922; --orange:#db6d28; --red:#f85149;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:1100px;margin:0 auto;padding:24px 18px 60px}
+  header{display:flex;flex-wrap:wrap;align-items:baseline;gap:12px;justify-content:space-between;margin-bottom:18px}
+  h1{font-size:20px;margin:0;letter-spacing:.3px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin:28px 0 10px}
+  .asof{color:var(--muted);font-size:12px}
+  .err{background:#3d1418;border:1px solid var(--red);color:#ffb4ab;padding:12px 14px;border-radius:8px;margin:12px 0;font-size:13px;display:none}
+
+  .verdict{border-radius:12px;padding:18px 20px;margin-bottom:8px;border:1px solid var(--line)}
+  .verdict .tag{font-size:24px;font-weight:700;letter-spacing:.5px}
+  .verdict .note{color:var(--muted);margin-top:4px}
+  .v-NEUTRAL{background:linear-gradient(90deg,#0f2417,transparent);border-color:#1d5a30}
+  .v-NEUTRAL .tag{color:var(--green)}
+  .v-HIGH_RISK{background:linear-gradient(90deg,#2a2410,transparent);border-color:#6b5414}
+  .v-HIGH_RISK .tag{color:var(--amber)}
+  .v-DISTRIBUTION{background:linear-gradient(90deg,#2a1a10,transparent);border-color:#7a3f17}
+  .v-DISTRIBUTION .tag{color:var(--orange)}
+  .v-BREAKDOWN{background:linear-gradient(90deg,#2d1213,transparent);border-color:#7a1f22}
+  .v-BREAKDOWN .tag{color:var(--red)}
+
+  .layers{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px}
+  @media(max-width:760px){.layers{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .card .head{display:flex;justify-content:space-between;align-items:baseline}
+  .card .name{font-weight:600}
+  .card .sub{font-size:11px;color:var(--muted)}
+  .score{font-size:34px;font-weight:700;line-height:1}
+  .bar{height:7px;border-radius:4px;background:var(--panel2);margin:10px 0 4px;overflow:hidden}
+  .bar>i{display:block;height:100%;border-radius:4px}
+
+  table.sig{width:100%;border-collapse:collapse;margin-top:10px;font-size:12.5px}
+  table.sig td{padding:4px 2px;border-top:1px solid var(--line);vertical-align:middle}
+  table.sig .lab{color:var(--txt)}
+  table.sig .val{color:var(--muted);text-align:right;white-space:nowrap}
+  table.sig .ss{text-align:right;width:34px;font-variant-numeric:tabular-nums}
+  .pill{display:inline-block;min-width:26px;text-align:center;border-radius:5px;padding:1px 6px;font-size:11px;font-weight:600}
+  .miss{color:var(--muted);font-style:italic}
+
+  .toggles{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}
+  .toggles label{display:flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line);
+    border-radius:8px;padding:8px 12px;cursor:pointer;user-select:none;font-size:13px}
+  .toggles input{accent-color:var(--red);width:15px;height:15px}
+
+  table.bt{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  table.bt th,table.bt td{padding:8px 10px;text-align:right;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+  table.bt th{background:var(--panel2);color:var(--muted);font-weight:600;text-transform:uppercase;font-size:10.5px;letter-spacing:.5px;border-top:none}
+  table.bt td:first-child,table.bt th:first-child{text-align:left}
+  table.bt tr.base td{color:var(--accent)}
+  .ctx{display:flex;flex-wrap:wrap;gap:18px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 16px;font-size:12.5px}
+  .ctx b{font-weight:600}
+  .ctx span{color:var(--muted)}
+  footer{margin-top:28px;color:var(--muted);font-size:11.5px;line-height:1.7;border-top:1px solid var(--line);padding-top:14px}
+  code{background:var(--panel2);padding:1px 5px;border-radius:4px;font-size:11px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Market Risk Dashboard</h1>
+    <div class="asof" id="asof">loading…</div>
+  </header>
+
+  <div class="err" id="err"></div>
+
+  <div id="verdict" class="verdict v-NEUTRAL">
+    <div class="tag" id="vtag">—</div>
+    <div class="note" id="vnote"></div>
+  </div>
+
+  <div class="layers" id="layers"></div>
+
+  <h2>Manual triggers (assert what you observe)</h2>
+  <div class="toggles" id="toggles"></div>
+
+  <h2>Context (not scored)</h2>
+  <div class="ctx" id="ctx"><span>loading…</span></div>
+
+  <h2>Backtest — actual forward 12-month S&amp;P returns by condition</h2>
+  <div id="btnote" class="asof" style="margin-bottom:8px"></div>
+  <div id="bt"></div>
+
+  <footer id="footer"></footer>
+</div>
+
+<script>
+/* ───────────────────────────────────────────────────────────────────────
+   SIGNALS + scoring — an EXACT mirror of risk_model.py (the source of truth).
+   If you change a threshold here, change it there too, and vice versa.
+   ─────────────────────────────────────────────────────────────────────── */
+const SIGNALS = {
+  // Layer 1: Fuel (vulnerability)
+  cape:      {layer:"fuel", lo:25, hi:45,  w:3,   base:80},
+  fwd_pe:    {layer:"fuel", lo:16, hi:24,  w:2,   base:75},
+  pb:        {layer:"fuel", lo:3,  hi:5.5, w:2,   base:75},
+  margin_yoy:{layer:"fuel", lo:0,  hi:45,  w:2,   base:90},
+  curve:     {layer:"fuel", lo:100,hi:-50, w:2,   base:30},
+  ipo:       {layer:"fuel", w:1.5, base:85, manual:true},
+  flows:     {layer:"fuel", w:1,   base:65, manual:true},
+  retail:    {layer:"fuel", w:1,   base:78, manual:true},
+  aicapex:   {layer:"fuel", w:1.5, base:90, manual:true},
+  // Layer 2: Deterioration (something breaking)
+  hy_oas:    {layer:"deter", lo:275, hi:600, w:4,   base:0},
+  ig_oas:    {layer:"deter", lo:80,  hi:220, w:2,   base:0},
+  baa:       {layer:"deter", lo:170, hi:450, w:2,   base:0},
+  spx_200:   {layer:"deter", lo:80,  hi:25,  w:3,   base:40},
+  rsp_spy:   {layer:"deter", lo:2,   hi:-15, w:2,   base:55},
+  iwm_spy:   {layer:"deter", lo:2,   hi:-18, w:1.5, base:55},
+  nhnl:      {layer:"deter", lo:50,  hi:-200,w:1.5, base:45},
+  cds:       {layer:"deter", w:1.5, base:20, manual:true},
+  // Layer 3: Triggers (act now)
+  lh:        {layer:"trig", w:3, toggle:true},
+  b50:       {layer:"trig", w:2, toggle:true},
+  b200:      {layer:"trig", w:3, toggle:true},
+  hy_break:  {layer:"trig", series:"hy_oas", lo:325, hi:600, w:4, base:0},
+  vol:       {layer:"trig", series:"vix",    lo:18,  hi:45,  w:2, base:0},
+  eps:       {layer:"trig", w:2, toggle:true},
+};
+const LAYERS = ["fuel","deter","trig"];
+
+// Display-only metadata (labels / units). Not part of the model.
+const META = {
+  cape:{l:"CAPE (Shiller P/E)"}, fwd_pe:{l:"Forward P/E"}, pb:{l:"Price / Book"},
+  margin_yoy:{l:"Margin debt YoY", u:"%"}, curve:{l:"2s10s curve", u:" bps"},
+  ipo:{l:"IPO / SPAC frenzy", q:1}, flows:{l:"Equity inflows", q:1},
+  retail:{l:"Retail participation", q:1}, aicapex:{l:"AI capex growth", q:1},
+  hy_oas:{l:"HY OAS", u:" bps"}, ig_oas:{l:"IG OAS", u:" bps"}, baa:{l:"Baa−10Y spread", u:" bps"},
+  spx_200:{l:"% S&P > 200DMA", u:"%"}, rsp_spy:{l:"RSP−SPY YTD (breadth)", u:"%"},
+  iwm_spy:{l:"IWM−SPY YTD (small caps)", u:"%"}, nhnl:{l:"Net new highs−lows"},
+  cds:{l:"Bank / sovereign CDS", q:1},
+  lh:{l:"Monthly lower-high"}, b50:{l:"Break 50DMA"}, b200:{l:"Break 200DMA"},
+  hy_break:{l:"HY OAS breakout (>325)", u:" bps"}, vol:{l:"VIX spike", u:""}, eps:{l:"EPS / guidance cut"},
+};
+const LAYER_META = {
+  fuel:{name:"Fuel", sub:"vulnerability — can persist for years"},
+  deter:{name:"Deterioration", sub:"something breaking"},
+  trig:{name:"Triggers", sub:"act now"},
+};
+
+function scoreFrom(v, lo, hi){
+  if(v===null || v===undefined || Number.isNaN(v)) return null;
+  const x = (v - lo) / (hi - lo);
+  return Math.round(Math.max(0, Math.min(1, x)) * 100);
+}
+
+/* Faithful port of layer_score(values, layer, use_base=True).
+   Returns {score, parts:[{key,raw,sub,w,used}]} for rendering. */
+function layerScore(values, layer, useBase=true){
+  let num=0, den=0; const parts=[];
+  for(const [key,cfg] of Object.entries(SIGNALS)){
+    if(cfg.layer!==layer) continue;
+    let s=null, raw=undefined, used=true;
+    if(cfg.toggle){
+      if(key in values && values[key]!==null && values[key]!==undefined){
+        s = values[key] ? 100 : 0; raw = values[key];
+      } else { used=false; parts.push({key,raw:undefined,sub:null,w:cfg.w,used}); continue; }
+    } else {
+      const srcKey = cfg.series || key;
+      const v = values[srcKey];
+      raw = v;
+      if(v===null || v===undefined){
+        if(useBase && ("base" in cfg)){ s=cfg.base; }
+        else { used=false; parts.push({key,raw:undefined,sub:null,w:cfg.w,used}); continue; }
+      } else {
+        s = scoreFrom(v, cfg.lo, cfg.hi);
+      }
+    }
+    num += s*cfg.w; den += cfg.w;
+    parts.push({key,raw,sub:s,w:cfg.w,used,fromBase:(raw===undefined||raw===null)});
+  }
+  return {score: den ? Math.round(num/den) : null, parts};
+}
+
+function verdict(F,D,T){
+  F=F||0; D=D||0; T=T||0;
+  if(T>=40) return ["BREAKDOWN","Triggers firing — execute per rules."];
+  if(D>=50) return ["DISTRIBUTION","Internals deteriorating under a stretched tape — reduce, arm hedges."];
+  if(F>=60) return ["HIGH_RISK","Fuel maxed, nothing broken yet — defend in composition, not exposure."];
+  return ["NEUTRAL","No edge for defense — stay invested."];
+}
+
+const scoreColor = s => s>=70?"var(--red)":s>=50?"var(--orange)":s>=30?"var(--amber)":"var(--green)";
+const fmtNum = (v,u="") => (v===null||v===undefined)?null:(Math.round(v*100)/100)+u;
+
+let RAW = {};               // latest risk_data.json metric values
+const TOGGLES = {lh:false,b50:false,b200:false,eps:false};
+
+function recompute(){
+  const values = Object.assign({}, RAW);
+  // only include a toggle key when asserted (mirrors Python: unchecked = skipped)
+  for(const k of Object.keys(TOGGLES)) if(TOGGLES[k]) values[k]=true;
+
+  const L = {};
+  for(const ly of LAYERS) L[ly] = layerScore(values, ly, true);
+  const [v,note] = verdict(L.fuel.score, L.deter.score, L.trig.score);
+
+  // verdict banner
+  const vb = document.getElementById("verdict");
+  vb.className = "verdict v-"+v;
+  document.getElementById("vtag").textContent = v.replace("_"," ");
+  document.getElementById("vnote").textContent = note;
+
+  // layer cards
+  const host = document.getElementById("layers"); host.innerHTML="";
+  for(const ly of LAYERS){
+    const {score,parts} = L[ly]; const m=LAYER_META[ly];
+    const rows = parts.map(p=>{
+      const meta = META[p.key]||{l:p.key};
+      let valTxt, ssTxt;
+      if(!p.used){ valTxt='<span class="miss">not set</span>'; ssTxt=''; }
+      else if(meta.q && p.fromBase){ valTxt='<span class="miss">qualitative</span>'; }
+      else if(p.fromBase){ valTxt='<span class="miss">— (base)</span>'; }
+      else { valTxt = fmtNum(p.raw, meta.u||""); }
+      ssTxt = (p.sub===null)?'' : `<span class="pill" style="background:${scoreColor(p.sub)}22;color:${scoreColor(p.sub)}">${p.sub}</span>`;
+      return `<tr><td class="lab">${meta.l}</td><td class="val">${valTxt??''}</td><td class="ss">${ssTxt}</td></tr>`;
+    }).join("");
+    const sc = score===null?"—":score;
+    const col = score===null?"var(--muted)":scoreColor(score);
+    host.insertAdjacentHTML("beforeend", `
+      <div class="card">
+        <div class="head"><div><div class="name">${m.name}</div><div class="sub">${m.sub}</div></div>
+          <div class="score" style="color:${col}">${sc}</div></div>
+        <div class="bar"><i style="width:${score||0}%;background:${col}"></i></div>
+        <table class="sig">${rows}</table>
+      </div>`);
+  }
+}
+
+function renderToggles(){
+  const host=document.getElementById("toggles"); host.innerHTML="";
+  for(const k of Object.keys(TOGGLES)){
+    const meta=META[k]||{l:k};
+    const id="tg_"+k;
+    host.insertAdjacentHTML("beforeend",
+      `<label for="${id}"><input type="checkbox" id="${id}"> ${meta.l}</label>`);
+    host.querySelector("#"+id).addEventListener("change",e=>{TOGGLES[k]=e.target.checked;recompute();});
+  }
+}
+
+function renderContext(d){
+  const items=[
+    ["Fed balance sheet", fmtNum(d.fed_bs,"")+" T"],
+    ["KOSPI", d.kospi!=null?(d.kospi+ (d.kospi_chg!=null?`  (${d.kospi_chg>0?"+":""}${d.kospi_chg}%)`:"")):null],
+    ["VIX", fmtNum(d.vix,"")],
+    ["HY OAS (3yr API only)", fmtNum(d.hy_oas," bps")],
+  ].filter(x=>x[1]!=null && !String(x[1]).includes("null"));
+  document.getElementById("ctx").innerHTML =
+    items.map(([k,v])=>`<div><b>${v}</b> &nbsp;<span>${k}</span></div>`).join("") || '<span>none</span>';
+}
+
+function renderBacktest(b){
+  document.getElementById("btnote").textContent =
+    `Window ${b.window||"?"} · credit from ${b.credit_start||b.hy_oas_start||"?"} · generated ${b.generated||"?"}`;
+  const cols=[["condition","Condition"],["n_months","n"],["mean_fwd12_pct","mean fwd12"],
+    ["median_fwd12_pct","median"],["pct_negative","% neg"],["worst_fwd12_pct","worst"],["mean_dd12_pct","avg DD"]];
+  const head = "<tr>"+cols.map(c=>`<th>${c[1]}</th>`).join("")+"</tr>";
+  const body = (b.results||[]).filter(Boolean).map((r,i)=>{
+    const cls = i===0?' class="base"':'';
+    const cell = k=>{const v=r[k]; if(v===undefined||v===null) return "—";
+      return (k.endsWith("_pct"))?(v+"%"):v;};
+    return `<tr${cls}>`+cols.map(c=>`<td>${cell(c[0])}</td>`).join("")+"</tr>";
+  }).join("");
+  document.getElementById("bt").innerHTML = `<table class="bt">${head}${body}</table>`;
+}
+
+async function getJSON(path){
+  const r = await fetch(path + (path.includes("?")?"":"?t="+Date.now()), {cache:"no-store"});
+  if(!r.ok) throw new Error(path+" → HTTP "+r.status);
+  return r.json();
+}
+
+async function load(){
+  // live readings + scores
+  try{
+    const d = await getJSON("risk_data.json");
+    RAW = d;
+    document.getElementById("asof").textContent = "data as of "+(d.asof||"?");
+    renderContext(d);
+    recompute();
+  }catch(e){ showErr("Couldn't load risk_data.json — "+e.message+
+      ". Serve over http (or deploy to GitHub Pages); browsers block fetch() on file://."); }
+  // backtest
+  try{ renderBacktest(await getJSON("backtest_results.json")); }
+  catch(e){ document.getElementById("bt").innerHTML =
+      `<div class="asof">backtest_results.json not available (${e.message})</div>`; }
+}
+
+function showErr(msg){ const el=document.getElementById("err"); el.style.display="block"; el.textContent=msg; }
+
+document.getElementById("footer").innerHTML = `
+  <b>How to read it.</b> Three layers, scored 0–100. <b>Fuel</b> = how stretched/vulnerable the setup is (can stay high for years).
+  <b>Deterioration</b> = whether internals are actually breaking. <b>Triggers</b> = act-now confirmations.
+  Verdict escalates: NEUTRAL → HIGH_RISK (F≥60) → DISTRIBUTION (D≥50) → BREAKDOWN (T≥40).<br>
+  <b>Honesty notes.</b> Scores fall back to baselines for qualitative/manual fields with no live feed (CAPE, P/E, P/B, IPO frenzy, AI capex, CDS…);
+  supply them via <code>overrides.json</code> to override. ICE BofA HY/IG OAS are served by the FRED API for only ~3 years, so the
+  long-history credit signal uses Moody's <b>Baa−10Y</b> (1986+); HY OAS is shown for current context only. KOSPI / Korea fields are
+  displayed but not scored (the backtest validates against the S&amp;P). Backtest = real forward returns, past behaviour, not a forecast.
+  Thresholds mirror <code>risk_model.py</code>.`;
+
+renderToggles();
+load();
+</script>
+</body>
+</html>

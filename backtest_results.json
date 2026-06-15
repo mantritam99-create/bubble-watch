@@ -1,0 +1,117 @@
+{
+  "generated": "2026-06-15",
+  "window": "1990-01 to 2026-06",
+  "credit_start": "1990-01",
+  "hy_oas_start": "2023-06",
+  "note": "Real forward 12m S&P returns conditioned on signals. Past behaviour, not a forecast. Credit conditioning uses Baa-10Y (1986+); ICE HY/IG OAS are API-truncated to ~3yr and shown for context only.",
+  "results": [
+    {
+      "condition": "ALL months (baseline)",
+      "n_months": 426,
+      "mean_fwd12_pct": 10.2,
+      "median_fwd12_pct": 11.9,
+      "pct_negative": 20.0,
+      "worst_fwd12_pct": -44.8,
+      "mean_dd12_pct": -5.0
+    },
+    {
+      "condition": "Baa spread > 250",
+      "n_months": 143,
+      "mean_fwd12_pct": 7.8,
+      "median_fwd12_pct": 12.8,
+      "pct_negative": 29.4,
+      "worst_fwd12_pct": -44.8,
+      "mean_dd12_pct": -8.3
+    },
+    {
+      "condition": "Baa spread > 350",
+      "n_months": 14,
+      "mean_fwd12_pct": 25.3,
+      "median_fwd12_pct": 22.3,
+      "pct_negative": 7.1,
+      "worst_fwd12_pct": -9.4,
+      "mean_dd12_pct": -4.3
+    },
+    {
+      "condition": "HY OAS > 325 (3yr)",
+      "n_months": 12,
+      "mean_fwd12_pct": 25.8,
+      "median_fwd12_pct": 25.0,
+      "pct_negative": 0.0,
+      "worst_fwd12_pct": 16.3,
+      "mean_dd12_pct": 1.1
+    },
+    {
+      "condition": "2s10s inverted (<0)",
+      "n_months": 48,
+      "mean_fwd12_pct": 9.0,
+      "median_fwd12_pct": 12.7,
+      "pct_negative": 27.1,
+      "worst_fwd12_pct": -27.5,
+      "mean_dd12_pct": -5.4
+    },
+    {
+      "condition": "VIX > 25",
+      "n_months": 79,
+      "mean_fwd12_pct": 14.1,
+      "median_fwd12_pct": 15.4,
+      "pct_negative": 19.0,
+      "worst_fwd12_pct": -44.8,
+      "mean_dd12_pct": -5.2
+    },
+    {
+      "condition": "Fuel >= 60",
+      "n_months": 74,
+      "mean_fwd12_pct": 9.7,
+      "median_fwd12_pct": 13.3,
+      "pct_negative": 24.3,
+      "worst_fwd12_pct": -27.5,
+      "mean_dd12_pct": -6.4
+    },
+    {
+      "condition": "Deterioration >= 50",
+      "n_months": 50,
+      "mean_fwd12_pct": 11.6,
+      "median_fwd12_pct": 13.9,
+      "pct_negative": 20.0,
+      "worst_fwd12_pct": -44.8,
+      "mean_dd12_pct": -8.4
+    },
+    {
+      "condition": "Triggers >= 40",
+      "n_months": 41,
+      "mean_fwd12_pct": 21.3,
+      "median_fwd12_pct": 22.6,
+      "pct_negative": 12.2,
+      "worst_fwd12_pct": -21.7,
+      "mean_dd12_pct": -3.8
+    },
+    {
+      "condition": "Verdict HIGH_RISK",
+      "n_months": 71,
+      "mean_fwd12_pct": 9.8,
+      "median_fwd12_pct": 13.1,
+      "pct_negative": 23.9,
+      "worst_fwd12_pct": -27.5,
+      "mean_dd12_pct": -6.4
+    },
+    {
+      "condition": "Verdict DISTRIBUTION",
+      "n_months": 29,
+      "mean_fwd12_pct": 4.4,
+      "median_fwd12_pct": 12.1,
+      "pct_negative": 24.1,
+      "worst_fwd12_pct": -44.8,
+      "mean_dd12_pct": -9.9
+    },
+    {
+      "condition": "Verdict BREAKDOWN",
+      "n_months": 41,
+      "mean_fwd12_pct": 21.3,
+      "median_fwd12_pct": 22.6,
+      "pct_negative": 12.2,
+      "worst_fwd12_pct": -21.7,
+      "mean_dd12_pct": -3.8
+    }
+  ]
+}

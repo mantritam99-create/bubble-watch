@@ -1,15 +1,15 @@
 {
-  "asof": "2026-06-24",
+  "asof": "2026-06-25",
   "baa": 151.0,
-  "hy_oas": 271.0,
-  "ig_oas": 74.0,
-  "curve": 34.0,
-  "vix": 19.49,
+  "hy_oas": 276.0,
+  "ig_oas": 75.0,
+  "curve": 30.0,
+  "vix": 18.63,
   "fed_bs": 6.74,
-  "kospi": 8203.84,
-  "kospi_chg": -9.99,
-  "rsp_spy": 2.07,
-  "iwm_spy": 11.71,
+  "kospi": 8471.02,
+  "kospi_chg": 3.26,
+  "rsp_spy": 2.67,
+  "iwm_spy": 12.15,
   "cape": null,
   "fwd_pe": null,
   "pb": null,
@@ -21,7 +21,7 @@
   "scores": {
     "fuel": 76,
     "deter": 12,
-    "trig": 1,
+    "trig": 0,
     "verdict": "HIGH_RISK",
     "note": "Fuel maxed, nothing broken yet \u2014 defend in composition, not exposure."
   }

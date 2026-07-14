@@ -6,10 +6,9 @@ Reliably-free sources only:
   • FRED (one free API key)  -> credit spreads, 2s10s, VIX, Fed balance sheet
   • yfinance (no key)        -> KOSPI level/chg, RSP/SPY/IWM relative strength
 
-Fields that have no clean free machine-readable feed (CAPE, fwd P/E, P/B,
-% above 200DMA, net new highs-lows, FINRA margin YoY, Korea margin/forced-liq)
-are read from an optional overrides.json. Everything missing is written as null;
-the dashboard falls back to its baseline for those.
+Fields that have no clean free machine-readable feed can be read from a dated
+overrides.json. Missing fields remain visible as baseline/missing coverage but
+do not enter the live score or verdict.
 
 Env:  FRED_API_KEY  (required for the FRED block; the rest still runs without it)
 Out:  risk_data.json  (same keys the dashboard reads, plus computed scores)
@@ -17,7 +16,7 @@ Out:  risk_data.json  (same keys the dashboard reads, plus computed scores)
 
 import os, sys, json, datetime as dt
 import requests
-from risk_model import score_all
+from risk_model import model_config, score_all
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")  # print non-ASCII on Windows consoles
@@ -42,8 +41,22 @@ FRED_SERIES = {
 
 OVERRIDE_KEYS = [
     "cape", "fwd_pe", "pb", "margin_yoy", "spx_200", "nhnl",
-    "kr_margin", "kr_forced_liq",
+    "kr_margin", "kr_forced_liq", "ipo", "flows", "retail", "aicapex", "cds",
 ]
+
+
+def load_overrides(path="overrides.json"):
+    """Load dated manual values; reject unversioned or future-dated input."""
+    with open(path) as f:
+        payload = json.load(f)
+    asof, values = payload.get("asof"), payload.get("values")
+    if not asof or not isinstance(values, dict):
+        raise ValueError("expected {'asof': 'YYYY-MM-DD', 'values': {...}}")
+    date = dt.date.fromisoformat(asof)
+    if date > dt.date.today():
+        raise ValueError("manual asof cannot be in the future")
+    return asof, {k: values[k] for k in OVERRIDE_KEYS
+                  if k in values and values[k] is not None}
 
 
 def fred_latest(series_id):
@@ -107,33 +120,42 @@ def fetch_yf(data):
 
 def main():
     data = {"asof": dt.date.today().isoformat()}
+    sources = {}
 
     print("FRED…")
     for key, (sid, scale) in FRED_SERIES.items():
         v = fred_latest(sid)
         data[key] = round(v * scale, 2) if v is not None else None
+        if data[key] is not None:
+            sources[key] = "live"
         print(f"  {key:8} {data[key]}")
 
     print("yfinance…")
     fetch_yf(data)
     for k in ("kospi", "kospi_chg", "rsp_spy", "iwm_spy"):
+        if data.get(k) is not None:
+            sources[k] = "live"
         print(f"  {k:8} {data.get(k)}")
 
     # manual / hard-to-fetch fields
     try:
-        with open("overrides.json") as f:
-            ov = json.load(f)
-        for k in OVERRIDE_KEYS:
-            if k in ov:
-                data[k] = ov[k]
-        print(f"overrides: applied {[k for k in OVERRIDE_KEYS if k in ov]}")
+        manual_asof, overrides = load_overrides()
+        data["manual_asof"] = manual_asof
+        for k, value in overrides.items():
+            data[k] = value
+            sources[k] = "manual"
+        print(f"overrides ({manual_asof}): applied {list(overrides)}")
     except FileNotFoundError:
         print("overrides.json not found — manual fields left null")
+    except (ValueError, TypeError, json.JSONDecodeError) as e:
+        print(f"overrides.json ignored — {e}")
 
     for k in OVERRIDE_KEYS:
         data.setdefault(k, None)
 
-    data["scores"] = score_all(data, use_base=True)
+    data["sources"] = sources
+    data["model"] = model_config()
+    data["scores"] = score_all(data, sources=sources)
     print("scores:", data["scores"])
 
     with open("risk_data.json", "w") as f:

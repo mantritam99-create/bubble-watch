@@ -25,6 +25,8 @@
   .verdict .note{color:var(--muted);margin-top:4px}
   .v-NEUTRAL{background:linear-gradient(90deg,#0f2417,transparent);border-color:#1d5a30}
   .v-NEUTRAL .tag{color:var(--green)}
+  .v-INSUFFICIENT_DATA{background:linear-gradient(90deg,#1c2230,transparent);border-color:#536174}
+  .v-INSUFFICIENT_DATA .tag{color:var(--accent)}
   .v-HIGH_RISK{background:linear-gradient(90deg,#2a2410,transparent);border-color:#6b5414}
   .v-HIGH_RISK .tag{color:var(--amber)}
   .v-DISTRIBUTION{background:linear-gradient(90deg,#2a1a10,transparent);border-color:#7a3f17}
@@ -38,6 +40,10 @@
   .card .head{display:flex;justify-content:space-between;align-items:baseline}
   .card .name{font-weight:600}
   .card .sub{font-size:11px;color:var(--muted)}
+  .coverage{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;font-size:10.5px;color:var(--muted)}
+  .coverage span{background:var(--panel2);border-radius:5px;padding:2px 5px}
+  .coverage .live{color:var(--green)}
+  .coverage .manual{color:var(--accent)}
   .score{font-size:34px;font-weight:700;line-height:1}
   .bar{height:7px;border-radius:4px;background:var(--panel2);margin:10px 0 4px;overflow:hidden}
   .bar>i{display:block;height:100%;border-radius:4px}
@@ -89,7 +95,7 @@
   <h2>Context (not scored)</h2>
   <div class="ctx" id="ctx"><span>loading…</span></div>
 
-  <h2>Backtest — actual forward 12-month S&amp;P returns by condition</h2>
+  <h2>Backtest — actual S&amp;P outcomes after each condition</h2>
   <div id="btnote" class="asof" style="margin-bottom:8px"></div>
   <div id="bt"></div>
 
@@ -97,39 +103,8 @@
 </div>
 
 <script>
-/* ───────────────────────────────────────────────────────────────────────
-   SIGNALS + scoring — an EXACT mirror of risk_model.py (the source of truth).
-   If you change a threshold here, change it there too, and vice versa.
-   ─────────────────────────────────────────────────────────────────────── */
-const SIGNALS = {
-  // Layer 1: Fuel (vulnerability)
-  cape:      {layer:"fuel", lo:25, hi:45,  w:3,   base:80},
-  fwd_pe:    {layer:"fuel", lo:16, hi:24,  w:2,   base:75},
-  pb:        {layer:"fuel", lo:3,  hi:5.5, w:2,   base:75},
-  margin_yoy:{layer:"fuel", lo:0,  hi:45,  w:2,   base:90},
-  curve:     {layer:"fuel", lo:100,hi:-50, w:2,   base:30},
-  ipo:       {layer:"fuel", w:1.5, base:85, manual:true},
-  flows:     {layer:"fuel", w:1,   base:65, manual:true},
-  retail:    {layer:"fuel", w:1,   base:78, manual:true},
-  aicapex:   {layer:"fuel", w:1.5, base:90, manual:true},
-  // Layer 2: Deterioration (something breaking)
-  hy_oas:    {layer:"deter", lo:275, hi:600, w:4,   base:0},
-  ig_oas:    {layer:"deter", lo:80,  hi:220, w:2,   base:0},
-  baa:       {layer:"deter", lo:170, hi:450, w:2,   base:0},
-  spx_200:   {layer:"deter", lo:80,  hi:25,  w:3,   base:40},
-  rsp_spy:   {layer:"deter", lo:2,   hi:-15, w:2,   base:55},
-  iwm_spy:   {layer:"deter", lo:2,   hi:-18, w:1.5, base:55},
-  nhnl:      {layer:"deter", lo:50,  hi:-200,w:1.5, base:45},
-  cds:       {layer:"deter", w:1.5, base:20, manual:true},
-  // Layer 3: Triggers (act now)
-  lh:        {layer:"trig", w:3, toggle:true},
-  b50:       {layer:"trig", w:2, toggle:true},
-  b200:      {layer:"trig", w:3, toggle:true},
-  hy_break:  {layer:"trig", series:"hy_oas", lo:325, hi:600, w:4, base:0},
-  baa_break: {layer:"trig", series:"baa",    lo:300, hi:500, w:3, base:0},
-  vol:       {layer:"trig", series:"vix",    lo:18,  hi:45,  w:2, base:0},
-  eps:       {layer:"trig", w:2, toggle:true},
-};
+/* Scoring configuration arrives in risk_data.json from risk_model.py. */
+let MODEL = null;
 const LAYERS = ["fuel","deter","trig"];
 
 // Display-only metadata (labels / units). Not part of the model.
@@ -158,39 +133,39 @@ function scoreFrom(v, lo, hi){
   return Math.round(Math.max(0, Math.min(1, x)) * 100);
 }
 
-/* Faithful port of layer_score(values, layer, use_base=True).
-   Returns {score, parts:[{key,raw,sub,w,used}]} for rendering. */
-function layerScore(values, layer, useBase=true){
-  let num=0, den=0; const parts=[];
-  for(const [key,cfg] of Object.entries(SIGNALS)){
+function layerScore(values, layer, sources){
+  let num=0, den=0, total=0; const parts=[];
+  const weights={live:0,manual:0,baseline:0,missing:0};
+  for(const [key,cfg] of Object.entries(MODEL.signals)){
     if(cfg.layer!==layer) continue;
-    let s=null, raw=undefined, used=true;
-    if(cfg.toggle){
-      if(key in values && values[key]!==null && values[key]!==undefined){
-        s = values[key] ? 100 : 0; raw = values[key];
-      } else { used=false; parts.push({key,raw:undefined,sub:null,w:cfg.w,used}); continue; }
-    } else {
-      const srcKey = cfg.series || key;
-      const v = values[srcKey];
-      raw = v;
-      if(v===null || v===undefined){
-        if(useBase && ("base" in cfg)){ s=cfg.base; }
-        else { used=false; parts.push({key,raw:undefined,sub:null,w:cfg.w,used}); continue; }
-      } else {
-        s = scoreFrom(v, cfg.lo, cfg.hi);
-      }
+    const srcKey=cfg.series||key, raw=values[srcKey], present=raw!==null&&raw!==undefined;
+    total+=cfg.w;
+    if(!present){
+      const source=("base" in cfg)?"baseline":"missing";
+      weights[source]+=cfg.w;
+      parts.push({key,raw,sub:null,w:cfg.w,used:false,source,baseline:cfg.base});
+      continue;
     }
+    let source=sources[srcKey]||sources[key]||((cfg.manual||cfg.toggle)?"manual":"live");
+    if(source!=="live"&&source!=="manual") source=(cfg.manual||cfg.toggle)?"manual":"live";
+    const s=cfg.toggle?(raw?100:0):cfg.manual?Math.round(Math.max(0,Math.min(100,Number(raw)))):scoreFrom(raw,cfg.lo,cfg.hi);
+    weights[source]+=cfg.w;
     num += s*cfg.w; den += cfg.w;
-    parts.push({key,raw,sub:s,w:cfg.w,used,fromBase:(raw===undefined||raw===null)});
+    parts.push({key,raw,sub:s,w:cfg.w,used:true,source});
   }
-  return {score: den ? Math.round(num/den) : null, parts};
+  const coverage=Object.fromEntries(Object.entries(weights).map(([k,w])=>[k,total?w/total:0]));
+  return {score:den?Math.round(num/den):null,parts,coverage};
 }
 
-function verdict(F,D,T){
+function verdict(F,D,T,fuelLive){
+  if(fuelLive<MODEL.min_live_fuel_coverage){
+    return ["INSUFFICIENT_DATA",`Live fuel coverage is ${Math.round(fuelLive*100)}% (minimum ${Math.round(MODEL.min_live_fuel_coverage*100)}%) — available signals are provisional.`];
+  }
   F=F||0; D=D||0; T=T||0;
-  if(T>=40) return ["BREAKDOWN","Triggers firing — execute per rules."];
-  if(D>=50) return ["DISTRIBUTION","Internals deteriorating under a stretched tape — reduce, arm hedges."];
-  if(F>=60) return ["HIGH_RISK","Fuel maxed, nothing broken yet — defend in composition, not exposure."];
+  const t=MODEL.verdict_thresholds;
+  if(T>=t.trig) return ["BREAKDOWN","Triggers firing — execute per rules."];
+  if(D>=t.deter) return ["DISTRIBUTION","Internals deteriorating under a stretched tape — reduce, arm hedges."];
+  if(F>=t.fuel) return ["HIGH_RISK","Fuel maxed, nothing broken yet — defend in composition, not exposure."];
   return ["NEUTRAL","No edge for defense — stay invested."];
 }
 
@@ -202,30 +177,29 @@ const TOGGLES = {lh:false,b50:false,b200:false,eps:false};
 
 function recompute(){
   const values = Object.assign({}, RAW);
-  // only include a toggle key when asserted (mirrors Python: unchecked = skipped)
-  for(const k of Object.keys(TOGGLES)) if(TOGGLES[k]) values[k]=true;
+  const sources = Object.assign({}, RAW.sources||{});
+  for(const k of Object.keys(TOGGLES)){ values[k]=TOGGLES[k]; sources[k]="manual"; }
 
   const L = {};
-  for(const ly of LAYERS) L[ly] = layerScore(values, ly, true);
-  const [v,note] = verdict(L.fuel.score, L.deter.score, L.trig.score);
+  for(const ly of LAYERS) L[ly] = layerScore(values,ly,sources);
+  const [v,note] = verdict(L.fuel.score,L.deter.score,L.trig.score,L.fuel.coverage.live);
 
   // verdict banner
   const vb = document.getElementById("verdict");
   vb.className = "verdict v-"+v;
-  document.getElementById("vtag").textContent = v.replace("_"," ");
+  document.getElementById("vtag").textContent = v.replaceAll("_"," ");
   document.getElementById("vnote").textContent = note;
 
   // layer cards
   const host = document.getElementById("layers"); host.innerHTML="";
   for(const ly of LAYERS){
-    const {score,parts} = L[ly]; const m=LAYER_META[ly];
+    const {score,parts,coverage} = L[ly]; const m=LAYER_META[ly];
     const rows = parts.map(p=>{
       const meta = META[p.key]||{l:p.key};
       let valTxt, ssTxt;
-      if(!p.used){ valTxt='<span class="miss">not set</span>'; ssTxt=''; }
-      else if(meta.q && p.fromBase){ valTxt='<span class="miss">qualitative</span>'; }
-      else if(p.fromBase){ valTxt='<span class="miss">— (base)</span>'; }
-      else { valTxt = fmtNum(p.raw, meta.u||""); }
+      if(p.source==="baseline"){ valTxt=`<span class="miss">baseline ${p.baseline} — excluded</span>`; ssTxt=''; }
+      else if(!p.used){ valTxt='<span class="miss">missing</span>'; ssTxt=''; }
+      else { valTxt = `${fmtNum(p.raw,meta.u||"")} · ${p.source}`; }
       ssTxt = (p.sub===null)?'' : `<span class="pill" style="background:${scoreColor(p.sub)}22;color:${scoreColor(p.sub)}">${p.sub}</span>`;
       return `<tr><td class="lab">${meta.l}</td><td class="val">${valTxt??''}</td><td class="ss">${ssTxt}</td></tr>`;
     }).join("");
@@ -236,6 +210,7 @@ function recompute(){
         <div class="head"><div><div class="name">${m.name}</div><div class="sub">${m.sub}</div></div>
           <div class="score" style="color:${col}">${sc}</div></div>
         <div class="bar"><i style="width:${score||0}%;background:${col}"></i></div>
+        <div class="coverage"><span class="live">live ${Math.round(coverage.live*100)}%</span><span class="manual">manual ${Math.round(coverage.manual*100)}%</span><span>baseline ${Math.round(coverage.baseline*100)}%</span><span>missing ${Math.round(coverage.missing*100)}%</span></div>
         <table class="sig">${rows}</table>
       </div>`);
   }
@@ -264,15 +239,23 @@ function renderContext(d){
 }
 
 function renderBacktest(b){
+  const results=(b.results||[]).filter(Boolean);
+  const modern=results.some(r=>r.outcomes);
   document.getElementById("btnote").textContent =
-    `Window ${b.window||"?"} · credit from ${b.credit_start||b.hy_oas_start||"?"} · generated ${b.generated||"?"}`;
-  const cols=[["condition","Condition"],["n_months","n"],["mean_fwd12_pct","mean fwd12"],
-    ["median_fwd12_pct","median"],["pct_negative","% neg"],["worst_fwd12_pct","worst"],["mean_dd12_pct","avg DD"]];
+    `Window ${b.window||"?"} · credit from ${b.credit_start||b.hy_oas_start||"?"} · generated ${b.generated||"?"}`+
+    (modern?" · returns plus forward 12m maximum drawdown":" · legacy 12m artifact; rerun backtest for all horizons");
+  const cols=modern?
+    [["condition","Condition"],["n_months","n"],["outcomes.1m.mean_pct","mean 1m"],
+     ["outcomes.3m.mean_pct","mean 3m"],["outcomes.6m.mean_pct","mean 6m"],
+     ["outcomes.12m.mean_pct","mean 12m"],["mean_max_drawdown_12m_pct","avg max DD"],
+     ["worst_max_drawdown_12m_pct","worst max DD"]]:
+    [["condition","Condition"],["n_months","n"],["mean_fwd12_pct","mean fwd12"],
+     ["median_fwd12_pct","median"],["pct_negative","% neg"],["worst_fwd12_pct","worst"],["mean_dd12_pct","avg DD"]];
   const head = "<tr>"+cols.map(c=>`<th>${c[1]}</th>`).join("")+"</tr>";
-  const body = (b.results||[]).filter(Boolean).map((r,i)=>{
+  const body = results.map((r,i)=>{
     const cls = i===0?' class="base"':'';
-    const cell = k=>{const v=r[k]; if(v===undefined||v===null) return "—";
-      return (k.endsWith("_pct"))?(v+"%"):v;};
+    const cell = k=>{const v=k.split(".").reduce((o,p)=>o?.[p],r); if(v===undefined||v===null) return "—";
+      return (k!=="condition"&&k!=="n_months")?(v+"%"):v;};
     return `<tr${cls}>`+cols.map(c=>`<td>${cell(c[0])}</td>`).join("")+"</tr>";
   }).join("");
   document.getElementById("bt").innerHTML = `<table class="bt">${head}${body}</table>`;
@@ -288,8 +271,11 @@ async function load(){
   // live readings + scores
   try{
     const d = await getJSON("risk_data.json");
+    if(!d.model?.signals) throw new Error("risk_data.json is missing exported model config");
     RAW = d;
-    document.getElementById("asof").textContent = "data as of "+(d.asof||"?");
+    MODEL = d.model;
+    document.getElementById("asof").textContent = "data as of "+(d.asof||"?")+
+      (d.manual_asof?" · manual as of "+d.manual_asof:"");
     renderContext(d);
     recompute();
   }catch(e){ showErr("Couldn't load risk_data.json — "+e.message+
@@ -305,12 +291,12 @@ function showErr(msg){ const el=document.getElementById("err"); el.style.display
 document.getElementById("footer").innerHTML = `
   <b>How to read it.</b> Three layers, scored 0–100. <b>Fuel</b> = how stretched/vulnerable the setup is (can stay high for years).
   <b>Deterioration</b> = whether internals are actually breaking. <b>Triggers</b> = act-now confirmations.
-  Verdict escalates: NEUTRAL → HIGH_RISK (F≥60) → DISTRIBUTION (D≥50) → BREAKDOWN (T≥40).<br>
-  <b>Honesty notes.</b> Scores fall back to baselines for qualitative/manual fields with no live feed (CAPE, P/E, P/B, IPO frenzy, AI capex, CDS…);
-  supply them via <code>overrides.json</code> to override. ICE BofA HY/IG OAS are served by the FRED API for only ~3 years, so the
+  After the coverage gate passes, the exported model thresholds can escalate the verdict from NEUTRAL to HIGH RISK, DISTRIBUTION, or BREAKDOWN.<br>
+  <b>Honesty notes.</b> Missing values and baseline priors are excluded from scores. Live, dated-manual, baseline, and missing weights are shown separately;
+  below 50% live Fuel coverage the only verdict is <b>INSUFFICIENT DATA</b>. ICE BofA HY/IG OAS are served by the FRED API for only ~3 years, so the
   long-history credit signal uses Moody's <b>Baa−10Y</b> (1986+); HY OAS is shown for current context only. KOSPI / Korea fields are
-  displayed but not scored (the backtest validates against the S&amp;P). Backtest = real forward returns, past behaviour, not a forecast.
-  Thresholds mirror <code>risk_model.py</code>.`;
+  displayed but not scored (the backtest validates against the S&amp;P). Backtest returns and maximum drawdowns are outcomes, not proof that a post-trigger rebound predicted a breakdown.
+  Model thresholds are exported by <code>risk_model.py</code>.`;
 
 renderToggles();
 load();

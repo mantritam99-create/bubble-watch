@@ -104,27 +104,37 @@ def score_row(row):
 
 def forward(df):
     px = df["spx"]
+    df["r1"]  = px.shift(-1)  / px - 1
     df["r3"]  = px.shift(-3)  / px - 1
     df["r6"]  = px.shift(-6)  / px - 1
     df["r12"] = px.shift(-12) / px - 1
-    # worst close over the next 12 months (drawdown proxy)
-    fwd_min = px[::-1].rolling(12, min_periods=1).min()[::-1].shift(-1)
-    df["dd12"] = fwd_min / px - 1
+    df["mdd12"] = [
+        (window / window.cummax() - 1).min() if len(window) == 13 else float("nan")
+        for i in range(len(px)) for window in [px.iloc[i:i + 13]]
+    ]
     return df
 
 
 def stats(sub, label):
-    s = sub["r12"].dropna()
-    if len(s) == 0:
+    if sub["r12"].dropna().empty:
         return None
+    outcomes = {}
+    for months in (1, 3, 6, 12):
+        s = sub[f"r{months}"].dropna()
+        outcomes[f"{months}m"] = {
+            "n": int(len(s)),
+            "mean_pct": round(s.mean() * 100, 1),
+            "median_pct": round(s.median() * 100, 1),
+            "pct_negative": round((s < 0).mean() * 100, 1),
+            "worst_pct": round(s.min() * 100, 1),
+        }
+    mdd = sub["mdd12"].dropna()
     return {
         "condition": label,
-        "n_months": int(len(s)),
-        "mean_fwd12_pct": round(s.mean() * 100, 1),
-        "median_fwd12_pct": round(s.median() * 100, 1),
-        "pct_negative": round((s < 0).mean() * 100, 1),
-        "worst_fwd12_pct": round(s.min() * 100, 1),
-        "mean_dd12_pct": round(sub["dd12"].dropna().mean() * 100, 1),
+        "n_months": outcomes["12m"]["n"],
+        "outcomes": outcomes,
+        "mean_max_drawdown_12m_pct": round(mdd.mean() * 100, 1),
+        "worst_max_drawdown_12m_pct": round(mdd.min() * 100, 1),
     }
 
 
@@ -138,7 +148,7 @@ def main():
     baseline = stats(df, "ALL months (baseline)")
     results = [baseline]
 
-    print("Reporting ACTUAL forward 12-month S&P returns, conditioned on real signals.")
+    print("Reporting ACTUAL forward 1/3/6/12-month S&P returns and 12-month maximum drawdown.")
     print(f"(Credit conditioning uses Baa-10Y from {df['baa'].first_valid_index():%Y-%m}; "
           f"ICE HY OAS only exists from {df['hy_oas'].first_valid_index():%Y-%m} — see HY rows)\n")
 
@@ -157,28 +167,33 @@ def main():
         ("Verdict BREAKDOWN",   df[df["verdict"] == "BREAKDOWN"]),
     ]
 
-    hdr = f"{'condition':22} {'n':>4} {'meanF12':>8} {'medF12':>7} {'%neg':>6} {'worst':>7} {'avgDD':>7}"
+    def row(st):
+        outcomes = st["outcomes"]
+        return (f"{st['condition']:22} {st['n_months']:>4} "
+                f"{outcomes['1m']['mean_pct']:>6}% {outcomes['3m']['mean_pct']:>6}% "
+                f"{outcomes['6m']['mean_pct']:>6}% {outcomes['12m']['mean_pct']:>7}% "
+                f"{st['mean_max_drawdown_12m_pct']:>7}% {st['worst_max_drawdown_12m_pct']:>8}%")
+
+    hdr = f"{'condition':22} {'n':>4} {'mean1':>7} {'mean3':>7} {'mean6':>7} {'mean12':>8} {'avgMDD':>8} {'worstMDD':>9}"
     print(hdr); print("-" * len(hdr))
-    base = baseline
-    print(f"{base['condition']:22} {base['n_months']:>4} {base['mean_fwd12_pct']:>7}% "
-          f"{base['median_fwd12_pct']:>6}% {base['pct_negative']:>5}% {base['worst_fwd12_pct']:>6}% {base['mean_dd12_pct']:>6}%")
+    print(row(baseline))
     for label, sub in conditions:
         st = stats(sub, label)
         if not st:
             print(f"{label:22}   no qualifying months")
             continue
         results.append(st)
-        print(f"{st['condition']:22} {st['n_months']:>4} {st['mean_fwd12_pct']:>7}% "
-              f"{st['median_fwd12_pct']:>6}% {st['pct_negative']:>5}% {st['worst_fwd12_pct']:>6}% {st['mean_dd12_pct']:>6}%")
+        print(row(st))
 
     out = {
         "generated": dt.date.today().isoformat(),
         "window": f"{df.index.min():%Y-%m} to {df.index.max():%Y-%m}",
         "credit_start": f"{df['baa'].first_valid_index():%Y-%m}",
         "hy_oas_start": f"{df['hy_oas'].first_valid_index():%Y-%m}",
-        "note": ("Real forward 12m S&P returns conditioned on signals. Past behaviour, "
-                 "not a forecast. Credit conditioning uses Baa-10Y (1986+); ICE HY/IG OAS "
-                 "are API-truncated to ~3yr and shown for context only."),
+        "note": ("Real forward 1/3/6/12m S&P returns and forward 12m maximum drawdown "
+                 "conditioned on signals. Post-trigger rebounds are outcomes, not evidence "
+                 "that the signal predicted a breakdown. Credit conditioning uses Baa-10Y "
+                 "(1986+); ICE HY/IG OAS are API-truncated to ~3yr and shown for context only."),
         "results": results,
     }
     with open("backtest_results.json", "w") as f:

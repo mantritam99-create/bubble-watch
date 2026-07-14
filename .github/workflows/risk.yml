@@ -38,6 +38,9 @@ jobs:
 
       - run: pip install -r requirements.txt
 
+      - name: Test scoring and backtest logic
+        run: python -m unittest discover -s tests -v
+
       - name: Fetch live readings
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}

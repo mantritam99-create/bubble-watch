@@ -18,11 +18,60 @@
   "nhnl": null,
   "kr_margin": null,
   "kr_forced_liq": null,
+  "sources": {
+    "baa": "live",
+    "hy_oas": "live",
+    "ig_oas": "live",
+    "curve": "live",
+    "vix": "live",
+    "fed_bs": "live",
+    "kospi": "live",
+    "kospi_chg": "live",
+    "rsp_spy": "live",
+    "iwm_spy": "live"
+  },
+  "model": {
+    "schema_version": 2,
+    "signals": {
+      "cape": {"layer": "fuel", "lo": 25, "hi": 45, "w": 3, "base": 80},
+      "fwd_pe": {"layer": "fuel", "lo": 16, "hi": 24, "w": 2, "base": 75},
+      "pb": {"layer": "fuel", "lo": 3, "hi": 5.5, "w": 2, "base": 75},
+      "margin_yoy": {"layer": "fuel", "lo": 0, "hi": 45, "w": 2, "base": 90},
+      "curve": {"layer": "fuel", "lo": 100, "hi": -50, "w": 2, "base": 30},
+      "ipo": {"layer": "fuel", "w": 1.5, "base": 85, "manual": true},
+      "flows": {"layer": "fuel", "w": 1, "base": 65, "manual": true},
+      "retail": {"layer": "fuel", "w": 1, "base": 78, "manual": true},
+      "aicapex": {"layer": "fuel", "w": 1.5, "base": 90, "manual": true},
+      "hy_oas": {"layer": "deter", "lo": 275, "hi": 600, "w": 4, "base": 0},
+      "ig_oas": {"layer": "deter", "lo": 80, "hi": 220, "w": 2, "base": 0},
+      "baa": {"layer": "deter", "lo": 170, "hi": 450, "w": 2, "base": 0},
+      "spx_200": {"layer": "deter", "lo": 80, "hi": 25, "w": 3, "base": 40},
+      "rsp_spy": {"layer": "deter", "lo": 2, "hi": -15, "w": 2, "base": 55},
+      "iwm_spy": {"layer": "deter", "lo": 2, "hi": -18, "w": 1.5, "base": 55},
+      "nhnl": {"layer": "deter", "lo": 50, "hi": -200, "w": 1.5, "base": 45},
+      "cds": {"layer": "deter", "w": 1.5, "base": 20, "manual": true},
+      "lh": {"layer": "trig", "w": 3, "toggle": true},
+      "b50": {"layer": "trig", "w": 2, "toggle": true},
+      "b200": {"layer": "trig", "w": 3, "toggle": true},
+      "hy_break": {"layer": "trig", "series": "hy_oas", "lo": 325, "hi": 600, "w": 4, "base": 0},
+      "baa_break": {"layer": "trig", "series": "baa", "lo": 300, "hi": 500, "w": 3, "base": 0},
+      "vol": {"layer": "trig", "series": "vix", "lo": 18, "hi": 45, "w": 2, "base": 0},
+      "eps": {"layer": "trig", "w": 2, "toggle": true}
+    },
+    "verdict_thresholds": {"fuel": 60, "deter": 50, "trig": 40},
+    "min_live_fuel_coverage": 0.5
+  },
   "scores": {
-    "fuel": 76,
-    "deter": 13,
+    "fuel": 43,
+    "deter": 0,
     "trig": 0,
-    "verdict": "HIGH_RISK",
-    "note": "Fuel maxed, nothing broken yet \u2014 defend in composition, not exposure."
+    "verdict": "INSUFFICIENT_DATA",
+    "note": "Live fuel coverage is 13% (minimum 50%) - available signals are provisional.",
+    "provisional": true,
+    "coverage": {
+      "fuel": {"live_weight": 2.0, "manual_weight": 0.0, "baseline_weight": 14.0, "missing_weight": 0.0, "live": 0.125, "manual": 0.0, "baseline": 0.875, "missing": 0.0, "total_weight": 16.0},
+      "deter": {"live_weight": 11.5, "manual_weight": 0.0, "baseline_weight": 6.0, "missing_weight": 0.0, "live": 0.6571, "manual": 0.0, "baseline": 0.3429, "missing": 0.0, "total_weight": 17.5},
+      "trig": {"live_weight": 9.0, "manual_weight": 0.0, "baseline_weight": 0.0, "missing_weight": 10.0, "live": 0.4737, "manual": 0.0, "baseline": 0.0, "missing": 0.5263, "total_weight": 19.0}
+    }
   }
 }

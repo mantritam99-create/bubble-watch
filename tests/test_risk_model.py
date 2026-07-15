@@ -45,6 +45,13 @@ class CoverageAwareScoringTests(unittest.TestCase):
         self.assertEqual(result["fuel"], 100)
         self.assertEqual(result["verdict"], "HIGH_RISK")
 
+    def test_finra_margin_data_increases_live_fuel_coverage_without_bypassing_gate(self):
+        result = score_all({"curve": 36, "margin_yoy": 45},
+                           sources={"curve": "live", "margin_yoy": "live"})
+
+        self.assertEqual(result["coverage"]["fuel"]["live"], 0.25)
+        self.assertEqual(result["verdict"], "INSUFFICIENT_DATA")
+
     def test_exported_config_is_json_serializable(self):
         self.assertIn('"min_live_fuel_coverage": 0.5', json.dumps(model_config()))
         html = Path("index.html").read_text(encoding="utf-8")

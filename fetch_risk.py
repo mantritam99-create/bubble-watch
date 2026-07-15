@@ -15,6 +15,7 @@ Out:  risk_data.json  (same keys the dashboard reads, plus computed scores)
 """
 
 import os, sys, json, datetime as dt
+from io import BytesIO
 import requests
 from risk_model import model_config, score_all
 
@@ -24,7 +25,9 @@ except Exception:
     pass
 
 FRED = "https://api.stlouisfed.org/fred/series/observations"
+FRED_GRAPH = "https://fred.stlouisfed.org/graph/fredgraph.csv"
 FRED_KEY = os.environ.get("FRED_API_KEY", "")
+FINRA_MARGIN = "https://www.finra.org/sites/default/files/2021-03/margin-statistics.xlsx"
 
 # metric key -> (FRED series id, scale).  scale converts to the dashboard's unit.
 # NOTE: baa (Moody's Baa-10Y, full history) backs the deter-layer credit signal.
@@ -61,19 +64,44 @@ def load_overrides(path="overrides.json"):
 
 def fred_latest(series_id):
     """Most recent non-missing observation for a FRED series, or None."""
-    if not FRED_KEY:
-        return None
     try:
-        r = requests.get(FRED, params={
-            "series_id": series_id, "api_key": FRED_KEY, "file_type": "json",
-            "sort_order": "desc", "limit": 10,
-        }, timeout=30)
-        r.raise_for_status()
-        for obs in r.json().get("observations", []):
-            if obs["value"] not in (".", "", None):
-                return float(obs["value"])
+        if FRED_KEY:
+            r = requests.get(FRED, params={
+                "series_id": series_id, "api_key": FRED_KEY, "file_type": "json",
+                "sort_order": "desc", "limit": 10,
+            }, timeout=30)
+            r.raise_for_status()
+            values = (obs["value"] for obs in r.json().get("observations", []))
+        else:
+            r = requests.get(FRED_GRAPH, params={"id": series_id}, timeout=30)
+            r.raise_for_status()
+            values = reversed(r.text.splitlines()[1:])
+            values = (line.rsplit(",", 1)[-1] for line in values)
+        for value in values:
+            if value not in (".", "", None):
+                return float(value)
     except Exception as e:
         print(f"  ! FRED {series_id}: {e}")
+    return None
+
+
+def finra_margin_yoy():
+    """Latest official FINRA customer-margin debt growth, or None."""
+    try:
+        import pandas as pd
+        r = requests.get(FINRA_MARGIN, timeout=30)
+        r.raise_for_status()
+        frame = pd.read_excel(BytesIO(r.content)).iloc[:, :2]
+        frame.columns = ["date", "debit"]
+        frame["date"] = pd.to_datetime(frame["date"], errors="coerce")
+        frame["debit"] = pd.to_numeric(frame["debit"], errors="coerce")
+        frame = frame.dropna().sort_values("date")
+        latest = frame.iloc[-1]
+        prior = frame[frame["date"] == latest["date"] - pd.DateOffset(years=1)]
+        if not prior.empty:
+            return round((latest["debit"] / prior.iloc[-1]["debit"] - 1) * 100, 2)
+    except Exception as e:
+        print(f"  ! FINRA margin debt: {e}")
     return None
 
 
@@ -136,6 +164,11 @@ def main():
         if data.get(k) is not None:
             sources[k] = "live"
         print(f"  {k:8} {data.get(k)}")
+
+    data["margin_yoy"] = finra_margin_yoy()
+    if data["margin_yoy"] is not None:
+        sources["margin_yoy"] = "live"
+    print(f"  margin_yoy {data['margin_yoy']}")
 
     # manual / hard-to-fetch fields
     try:
